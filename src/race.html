@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.15.1/css/ol.css"
+    type="text/css">
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0
+    }
+
+    .map {
+      height: 100vh;
+      width: 100vw;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.15.1/build/ol.js"></script>
+  <title></title>
+</head>
+
+<body>
+  <div id="map" class="map"></div>
+</body>
+<script type="application/javascript">
+  const race = window.location.pathname.replace('/', '')
+  const highlightedCaps = new Set(window.location.search.replace("?", "").split(","));
+
+  console.log(`Race`, race)
+  console.log(`Highlighted caps`, highlightedCaps)
+
+  document.title = `${race} Cap(s) ${[...highlightedCaps].join(", ")}`
+
+  const ridersSource = new ol.source.Vector({
+  });
+
+  const highlightedStyle = new ol.style.Style({
+    image: new ol.style.Circle({
+      radius: 10,
+      stroke: new ol.style.Stroke({
+        color: '#fff',
+      }),
+      fill: new ol.style.Fill({
+        color: 'darkred',
+      }),
+    }),
+    text: new ol.style.Text({
+      text: "",
+      fill: new ol.style.Fill({
+        color: '#fff',
+      }),
+    }),
+  });
+
+  const normalStyle = new ol.style.Style({
+    image: new ol.style.Circle({
+      radius: 10,
+      stroke: new ol.style.Stroke({
+        color: 'rgba(255,255,255,0.3)',
+      }),
+      fill: new ol.style.Fill({
+        color: 'rgba(51, 153, 204, 0.3)',
+      }),
+    }),
+    text: new ol.style.Text({
+      text: "",
+      fill: new ol.style.Fill({
+        color: 'rgba(255,255,255,0.3)',
+      }),
+    }),
+  });
+
+  const ridersLayer = new ol.layer.Vector({
+    source: ridersSource,
+    style: function (feature) {
+      const cap = feature.getProperties()["teamNumber"];
+      if (highlightedCaps.has(cap)) {
+        highlightedStyle.getText().setText(feature.getProperties()["teamNumber"]);
+        return highlightedStyle;
+      } else {
+        normalStyle.getText().setText(feature.getProperties()["teamNumber"]);
+        return normalStyle;
+      }
+    },
+  });
+
+  const osmSource = new ol.layer.Tile({
+    source: new ol.source.OSM()
+  });
+
+  var map = new ol.Map({
+    target: 'map',
+    layers: [osmSource, ridersLayer],
+    view: new ol.View({
+      center: ol.proj.fromLonLat([0, 0]),
+      zoom: 4
+    })
+  });
+
+  var fitted = false;
+
+  const evtSource = new EventSource(`sse/${race}`);
+  evtSource.addEventListener("race_update", function (event) {
+    console.log("Got race_update");
+    const data = JSON.parse(event.data);
+
+    const highlightedCoordsForExtentCalculation = [];
+
+    for (riderName in data) {
+      let rider = data[riderName];
+      let id = rider['riderNameClean'];
+      let geometry = new ol.geom.Point(ol.proj.fromLonLat([rider['longitude'], rider['latitude']]));
+
+      const existing = ridersSource.getFeatureById(id)
+      if (existing == null) {
+        const feature = new ol.Feature({
+          geometry: geometry,
+        });
+        feature.setId(id);
+        feature.setProperties(rider);
+        ridersSource.addFeature(feature);
+      } else {
+        existing.setGeometry(geometry)
+      }
+
+      if (highlightedCaps.has(rider['teamNumber'])) {
+        highlightedCoordsForExtentCalculation.push(geometry.flatCoordinates)
+      }
+    }
+
+    if (!fitted || highlightedCaps.size > 0) {
+      var extent;
+      if (highlightedCaps.size > 0) {
+        extent = ol.extent.boundingExtent(highlightedCoordsForExtentCalculation);
+      } else {
+        extent = ridersSource.getExtent();
+      }
+      map.getView().fit(extent, { padding: [100, 100, 100, 100], maxZoom: 16 });
+      fitted = true;
+    }
+  });
+</script>
+
+</html>
