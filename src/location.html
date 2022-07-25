@@ -22,6 +22,7 @@
     <div class="align-self-center">
       <a id="osm_link" href="" target="_blank" class="text-reset text-decoration-none">
         <pre class="display-6" id="location">Unbekannt</pre>
+        <pre id="location_latlon"></pre>
       </a>
     </div>
   </div>
@@ -48,11 +49,12 @@
 
     var text = '';
     if (amenity) { text += `${amenity}\n` }
-    if (street) { text += `${street} ${houseNumber}\n` }
-    if (postcode || city) { text += `${postcode} ${city}\n` }
-    if (country || state) { text += `${state} ${country}\n` }
+    if (street) { text += `${street} ${houseNumber || ''}\n` }
+    if (postcode || city) { text += `${postcode || ''} ${city || ''}\n` }
+    if (country || state) { text += `${state || ''} ${country || ''}\n` }
 
     document.getElementById('location').innerText = text;
+    document.getElementById('location_latlon').innerText = `${location.lat} ${location.lon}`;
     document.getElementById("osm_link").setAttribute("href", `http://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lon}&zoom=16`)
 
   });
