@@ -26,7 +26,7 @@
 </body>
 <script type="application/javascript">
   const race = window.location.pathname.replace('/', '')
-  const highlightedCaps = new Set(window.location.search.replace("?", "").split(","));
+  const highlightedCaps = new Set(window.location.search.replace("?", "").split(",").map(n => parseInt(n, 10)).filter(n => !isNaN(n)));
 
   console.log(`Race`, race)
   console.log(`Highlighted caps`, highlightedCaps)
@@ -54,7 +54,7 @@
     }),
   });
 
-  const normalStyle = new ol.style.Style({
+  const mutedStyle = new ol.style.Style({
     image: new ol.style.Circle({
       radius: 10,
       stroke: new ol.style.Stroke({
@@ -72,17 +72,40 @@
     }),
   });
 
+  const normalStyle = new ol.style.Style({
+    image: new ol.style.Circle({
+      radius: 10,
+      stroke: new ol.style.Stroke({
+        color: 'rgba(255,255,255,1.0)',
+      }),
+      fill: new ol.style.Fill({
+        color: 'rgba(51, 153, 204, 1.0)',
+      }),
+    }),
+    text: new ol.style.Text({
+      text: "",
+      fill: new ol.style.Fill({
+        color: 'rgba(255,255,255,1.0)',
+      }),
+    }),
+  });
+
   const ridersLayer = new ol.layer.Vector({
     source: ridersSource,
     style: function (feature) {
-      const cap = feature.getProperties()["teamNumber"];
-      if (highlightedCaps.has(cap)) {
-        highlightedStyle.getText().setText(feature.getProperties()["teamNumber"]);
-        return highlightedStyle;
-      } else {
-        normalStyle.getText().setText(feature.getProperties()["teamNumber"]);
-        return normalStyle;
+      var style = normalStyle;
+
+      if (highlightedCaps.size > 0) {
+        const cap = parseInt(feature.getProperties()["teamNumber"], 10);
+        if (highlightedCaps.has(cap)) {
+          style = highlightedStyle;
+        } else {
+          style = mutedStyle;
+        }
       }
+
+      style.getText().setText(feature.getProperties()["teamNumber"]);
+      return style;
     },
   });
 
@@ -112,6 +135,7 @@
       let rider = data[riderName];
       let id = rider['riderNameClean'];
       let geometry = new ol.geom.Point(ol.proj.fromLonLat([rider['longitude'], rider['latitude']]));
+      const cap = parseInt(rider['teamNumber'], 10)
 
       const existing = ridersSource.getFeatureById(id)
       if (existing == null) {
@@ -125,7 +149,7 @@
         existing.setGeometry(geometry)
       }
 
-      if (highlightedCaps.has(rider['teamNumber'])) {
+      if (highlightedCaps.has(cap)) {
         highlightedCoordsForExtentCalculation.push(geometry.flatCoordinates)
       }
     }
