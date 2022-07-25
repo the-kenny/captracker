@@ -86,13 +86,13 @@
     },
   });
 
-  const osmSource = new ol.layer.Tile({
+  const osmLayer = new ol.layer.WebGLTile({
     source: new ol.source.OSM()
   });
 
   var map = new ol.Map({
     target: 'map',
-    layers: [osmSource, ridersLayer],
+    layers: [osmLayer, ridersLayer],
     view: new ol.View({
       center: ol.proj.fromLonLat([0, 0]),
       zoom: 4
@@ -131,13 +131,13 @@
     }
 
     if (!fitted || highlightedCaps.size > 0) {
-      var extent;
-      if (highlightedCaps.size > 0 && highlightedCoordsForExtentCalculation.size > 0) {
+      var extent = null;
+      if (highlightedCaps.size > 0 && highlightedCoordsForExtentCalculation.length > 0) {
         extent = ol.extent.boundingExtent(highlightedCoordsForExtentCalculation);
       } else {
         extent = ridersSource.getExtent();
       }
-      if (extent) {
+      if (extent != null) {
         map.getView().fit(extent, { padding: [100, 100, 100, 100], maxZoom: 16 });
       }
       fitted = true;
