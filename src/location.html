@@ -55,7 +55,8 @@
 
     document.getElementById('location').innerText = text;
     document.getElementById('location_latlon').innerText = `${location.lat} ${location.lon}`;
-    document.getElementById("osm_link").setAttribute("href", `http://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lon}&zoom=16`)
+    // document.getElementById("osm_link").setAttribute("href", `http://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lon}&zoom=16`)
+    document.getElementById("osm_link").setAttribute("href", `/${race}?${cap}`)
 
   });
 </script>
