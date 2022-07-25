@@ -8,12 +8,13 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use captracker::Subscriptions;
-use futures::FutureExt;
+use captracker::{nominatim, Subscriptions};
+use futures::{stream::StreamExt as _, Future};
+use futures::{FutureExt, Stream};
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, convert::Infallible, future, net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
-use tokio_stream::StreamExt as _;
+// use tokio_stream::StreamExt as _;
 use tower_http::cors::CorsLayer;
 
 #[tokio::main]
@@ -34,11 +35,24 @@ async fn main() {
     #[cfg(not(debug_assertions))]
     let race_page = { get(|| async { Html(include_str!("race.html")) }) };
 
+    #[cfg(debug_assertions)]
+    let location_page = {
+        axum::routing::get_service(tower_http::services::ServeFile::new(std::path::Path::new(
+            "src/location.html",
+        )))
+        .handle_error(handle_error)
+    };
+
+    #[cfg(not(debug_assertions))]
+    let location_page = { get(|| async { Html(include_str!("location.html")) }) };
+
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/:race", race_page)
-        .route("/sse/:race", get(stream))
+        .route("/:race/:cap", location_page)
+        .route("/sse/:race", get(race_stream))
+        .route("/sse/:race/:cap/location", get(location_stream))
         // `POST /users` goes to `create_user`
         .layer(Extension(subscriptions));
 
@@ -52,35 +66,44 @@ async fn main() {
         .unwrap();
 }
 
-// async fn race() -> Result<impl IntoResponse, anyhow::Error> {
-//     let file = tokio::fs::File::open(std::path::Path::new("src/race.html")).await?;
-
-//     let response = Response::builder()
-//         .status(StatusCode::OK)
-//         .header(
-//             reqwest::header::CONTENT_TYPE,
-//             axum::http::HeaderValue::from_str("text/html").unwrap(),
-//         )
-//         .body(axum::body::boxed(axum::body::StreamBody::new(file.into())))
-//         .unwrap();
-//     Ok(response)
-// }
-
-async fn stream(
+async fn race_stream(
     Path(race): Path<String>,
     Extension(subs): Extension<Arc<RwLock<Subscriptions>>>,
 ) -> sse::Sse<impl futures::stream::Stream<Item = Result<sse::Event, Infallible>>> {
     let rx = {
         let mut lock = subs.write().await;
-        lock.get(&race)
+        lock.race(&race)
     };
 
     let stream = tokio_stream::wrappers::WatchStream::new(rx)
-        .filter(|value| value != &serde_json::Value::Null)
+        .filter(|value| future::ready(value != &serde_json::Value::Null))
         // .map(|entry| entry.unwrap())
         .map(|update| {
             sse::Event::default()
                 .event("race_update")
+                .json_data(&update)
+                .unwrap()
+        })
+        .map(Ok);
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+async fn location_stream(
+    Path((race, cap)): Path<(String, u64)>,
+    Extension(subs): Extension<Arc<RwLock<Subscriptions>>>,
+) -> sse::Sse<impl futures::stream::Stream<Item = Result<sse::Event, Infallible>>> {
+    let rx = {
+        let mut lock = subs.write().await;
+        lock.cap(&race, cap)
+    };
+
+    let stream = tokio_stream::wrappers::WatchStream::new(rx)
+        .filter(|value| future::ready(value != &serde_json::Value::Null))
+        // .map(|entry| entry.unwrap())
+        .map(|update| {
+            sse::Event::default()
+                .event("location_update")
                 .json_data(&update)
                 .unwrap()
         })

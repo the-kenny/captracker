@@ -3,6 +3,8 @@
 
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.15.1/css/ol.css"
     type="text/css">
   <style>
@@ -124,7 +126,7 @@
 
   var fitted = false;
 
-  const evtSource = new EventSource(`sse/${race}`);
+  const evtSource = new EventSource(`/sse/${race}`);
   evtSource.addEventListener("race_update", function (event) {
     console.log("Got race_update");
     const data = JSON.parse(event.data);
