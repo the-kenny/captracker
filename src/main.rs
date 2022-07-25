@@ -8,7 +8,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use dsd_ultra::Subscriptions;
+use captracker::Subscriptions;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
