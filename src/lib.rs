@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, future};
 
+use futures::{Stream, StreamExt};
 use tokio::sync::watch;
+use tokio_stream::wrappers::WatchStream;
 use tracing::{info, warn};
 
 pub mod fmc;
@@ -46,57 +48,45 @@ fn location_updates(
     race: watch::Receiver<fmc::Update>,
     cap: u64,
 ) -> watch::Receiver<nominatim::Update> {
-    let mut race = race;
     let race_name = race_name.to_owned();
     let (tx, rx) = tokio::sync::watch::channel(serde_json::Value::Null);
     tokio::task::spawn(async move {
-        let mut last_coords = (0.0, 0.0);
-
-        loop {
-            let update = race.borrow().to_owned();
-            if let serde_json::Value::Object(update) = update {
-                for update in update.values() {
-                    let update_cap = update
-                        .get("teamNumber")
-                        .and_then(|j| j.as_str())
-                        .and_then(|s| u64::from_str_radix(s, 10).ok());
-                    let update_cap = if let Some(c) = update_cap {
-                        c
+        WatchStream::new(race)
+            .flat_map(|update| futures::stream::iter(update.as_object().cloned()))
+            .flat_map(|o| futures::stream::iter(o))
+            .map(|(_, v)| v)
+            .flat_map(|cap| futures::stream::iter(cap.as_object().cloned()))
+            .filter(|update| future::ready(team_number(update) == Some(cap)))
+            .scan((0.0, 0.0), |state, update| {
+                let lat = update["latitude"].as_f64().expect("latitude not an f64") as f32;
+                let lon = update["longitude"].as_f64().expect("longitude not an f64") as f32;
+                let last_coordinates = *state;
+                *state = (lat, lon);
+                async move {
+                    if last_coordinates != (lat, lon) {
+                        let location = nominatim::address_info(lat, lon)
+                            .await
+                            .expect("Failed to get location");
+                        Some(futures::stream::iter(Some(location)))
                     } else {
-                        warn!(
-                            "Couldn't parse 'teamNumber': '{:?}'",
-                            update.get("teamNumber")
-                        );
-                        continue;
-                    };
-
-                    if update_cap == cap {
-                        let lat = update["latitude"].as_f64().expect("latitude not an f64") as f32;
-                        let lon =
-                            update["longitude"].as_f64().expect("longitude not an f64") as f32;
-
-                        if (lat, lon) != last_coords {
-                            let location = nominatim::address_info(lat, lon)
-                                .await
-                                .expect("Failed to get location");
-
-                            info!("New Location for {cap}: {location:?}");
-
-                            tx.send(location).expect("Send failed");
-                            last_coords = (lat, lon);
-                        }
-
-                        break;
+                        Some(futures::stream::iter(Option::<serde_json::Value>::None))
                     }
                 }
-            }
-
-            if let Some(err) = race.changed().await.err() {
-                warn!("Error in location_updates for {race_name} {cap}: {err:?}");
-                break;
-            }
-        }
+            })
+            .flatten()
+            .for_each(|location| async {
+                info!("New Location for {race_name} {cap}: {location:?}");
+                tx.send(location).expect("Send failed")
+            })
+            .await;
     });
 
     rx
+}
+
+fn team_number(rider: &serde_json::Map<String, serde_json::Value>) -> Option<u64> {
+    rider
+        .get("teamNumber")
+        .and_then(|j| j.as_str())
+        .and_then(|s| u64::from_str_radix(s, 10).ok())
 }
