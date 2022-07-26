@@ -1,21 +1,18 @@
+use axum::http::StatusCode;
 use axum::{
     extract::Path,
-    http::{Response, StatusCode},
     response::{
         sse::{self, KeepAlive},
-        Html, IntoResponse, Sse,
+        IntoResponse, Sse,
     },
-    routing::{get, post},
-    Extension, Json, Router,
+    routing::get,
+    Extension, Router,
 };
-use captracker::{nominatim, Subscriptions};
-use futures::{stream::StreamExt as _, Future};
-use futures::{FutureExt, Stream};
-use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, convert::Infallible, future, net::SocketAddr, sync::Arc};
+use captracker::Subscriptions;
+use futures::stream::StreamExt as _;
+use std::{convert::Infallible, future, net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 // use tokio_stream::StreamExt as _;
-use tower_http::cors::CorsLayer;
 
 #[tokio::main]
 async fn main() {

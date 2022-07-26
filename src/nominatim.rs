@@ -1,5 +1,5 @@
 use reqwest::{header::USER_AGENT, RequestBuilder};
-use tracing::log::info;
+use tracing::info;
 
 pub type Update = serde_json::Value;
 

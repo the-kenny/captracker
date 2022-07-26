@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use tokio::sync::watch;
-use tracing::log::warn;
+use tracing::{info, warn};
 
 pub mod fmc;
 pub mod nominatim;
@@ -21,19 +21,22 @@ impl Subscriptions {
     }
 
     pub fn race(&mut self, race: &str) -> watch::Receiver<fmc::Update> {
+        info!("Subscribing to {race}");
+
         self.races
             .entry(race.to_owned())
             .or_insert_with(|| fmc::subscribe(race))
-            // .or_insert_with(|| todo!())
             .clone()
     }
 
     pub fn cap(&mut self, race_name: &str, cap: u64) -> watch::Receiver<nominatim::Update> {
         let race = self.race(race_name);
+
+        info!("Subscribing to {race_name} cap {cap}");
+
         self.caps
             .entry((race_name.to_owned(), cap))
             .or_insert_with(|| location_updates(race_name, race, cap))
-            // .or_insert_with(|| todo!())
             .clone()
     }
 }
@@ -76,6 +79,9 @@ fn location_updates(
                             let location = nominatim::address_info(lat, lon)
                                 .await
                                 .expect("Failed to get location");
+
+                            info!("New Location for {cap}: {location:?}");
+
                             tx.send(location).expect("Send failed");
                             last_coords = (lat, lon);
                         }
