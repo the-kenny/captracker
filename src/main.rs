@@ -21,6 +21,13 @@ async fn main() {
 
     let subscriptions = Arc::new(RwLock::new(Subscriptions::new()));
 
+    #[cfg(not(debug_assertions))]
+    use axum::response::Html;
+    #[cfg(not(debug_assertions))]
+    let race_page = { get(|| async { Html(include_str!("race.html")) }) };
+    #[cfg(not(debug_assertions))]
+    let location_page = { get(|| async { Html(include_str!("location.html")) }) };
+
     #[cfg(debug_assertions)]
     let race_page = {
         axum::routing::get_service(tower_http::services::ServeFile::new(std::path::Path::new(
@@ -29,9 +36,6 @@ async fn main() {
         .handle_error(handle_error)
     };
 
-    #[cfg(not(debug_assertions))]
-    let race_page = { get(|| async { Html(include_str!("race.html")) }) };
-
     #[cfg(debug_assertions)]
     let location_page = {
         axum::routing::get_service(tower_http::services::ServeFile::new(std::path::Path::new(
@@ -39,9 +43,6 @@ async fn main() {
         )))
         .handle_error(handle_error)
     };
-
-    #[cfg(not(debug_assertions))]
-    let location_page = { get(|| async { Html(include_str!("location.html")) }) };
 
     // build our application with a route
     let app = Router::new()
