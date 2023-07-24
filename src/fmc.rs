@@ -1,7 +1,6 @@
 use std::time::Duration;
 
-use tokio::sync::watch;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 pub type Update = serde_json::Value;
 

@@ -11,7 +11,7 @@ pub mod nominatim;
 #[derive(Debug)]
 pub struct Subscriptions {
     races: HashMap<String, watch::Receiver<fmc::Update>>,
-    caps: HashMap<(String, u64), watch::Receiver<nominatim::Update>>,
+    caps: HashMap<(String, u64), UpdateStream<nominatim::Location>>,
 }
 
 impl Subscriptions {
@@ -31,7 +31,7 @@ impl Subscriptions {
             .clone()
     }
 
-    pub fn cap(&mut self, race_name: &str, cap: u64) -> watch::Receiver<nominatim::Update> {
+    pub fn cap(&mut self, race_name: &str, cap: u64) -> UpdateStream<nominatim::Location> {
         let race = self.race(race_name);
 
         info!("Subscribing to {race_name} cap {cap}");
@@ -43,13 +43,30 @@ impl Subscriptions {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Update<T> {
+    Pending,
+    New(T),
+}
+
+impl<T> Update<T> {
+    pub fn into_inner(self) -> Option<T> {
+        match self {
+            Update::Pending => None,
+            Update::New(x) => Some(x),
+        }
+    }
+}
+
+type UpdateStream<T> = watch::Receiver<Update<T>>;
+
 fn location_updates(
     race_name: &str,
     race: watch::Receiver<fmc::Update>,
     cap: u64,
-) -> watch::Receiver<nominatim::Update> {
+) -> watch::Receiver<Update<nominatim::Location>> {
     let race_name = race_name.to_owned();
-    let (tx, rx) = tokio::sync::watch::channel(serde_json::Value::Null);
+    let (tx, rx) = tokio::sync::watch::channel(Update::Pending);
     tokio::task::spawn(async move {
         WatchStream::new(race)
             .flat_map(|update| futures::stream::iter(update.as_object().cloned()))
@@ -69,14 +86,14 @@ fn location_updates(
                             .expect("Failed to get location");
                         Some(futures::stream::iter(Some(location)))
                     } else {
-                        Some(futures::stream::iter(Option::<serde_json::Value>::None))
+                        Some(futures::stream::iter(Option::<nominatim::Location>::None))
                     }
                 }
             })
             .flatten()
             .for_each(|location| async {
                 info!("New Location for {race_name} {cap}: {location:?}");
-                tx.send(location).expect("Send failed")
+                tx.send(Update::New(location)).expect("Send failed")
             })
             .await;
     });

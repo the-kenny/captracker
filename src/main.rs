@@ -97,12 +97,12 @@ async fn location_stream(
     };
 
     let stream = tokio_stream::wrappers::WatchStream::new(rx)
-        .filter(|value| future::ready(value != &serde_json::Value::Null))
+        .filter_map(|value| future::ready(value.into_inner()))
         // .map(|entry| entry.unwrap())
         .map(|update| {
             sse::Event::default()
                 .event("location_update")
-                .json_data(&update)
+                .json_data(update)
                 .unwrap()
         })
         .map(Ok);
