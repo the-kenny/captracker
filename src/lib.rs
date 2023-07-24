@@ -1,6 +1,7 @@
 use std::{collections::HashMap, future};
 
 use futures::{Stream, StreamExt};
+use serde::Serialize;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 use tracing::{info, warn};
@@ -11,7 +12,7 @@ pub mod nominatim;
 #[derive(Debug)]
 pub struct Subscriptions {
     races: HashMap<String, watch::Receiver<fmc::Update>>,
-    caps: HashMap<(String, u64), UpdateStream<nominatim::Location>>,
+    caps: HashMap<(String, u64), UpdateStream<CapLocation>>,
 }
 
 impl Subscriptions {
@@ -31,7 +32,7 @@ impl Subscriptions {
             .clone()
     }
 
-    pub fn cap(&mut self, race_name: &str, cap: u64) -> UpdateStream<nominatim::Location> {
+    pub fn cap(&mut self, race_name: &str, cap: u64) -> UpdateStream<CapLocation> {
         let race = self.race(race_name);
 
         info!("Subscribing to {race_name} cap {cap}");
@@ -60,19 +61,24 @@ impl<T> Update<T> {
 
 type UpdateStream<T> = watch::Receiver<Update<T>>;
 
+#[derive(Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct CapLocation {
+    cap: fmc::Update,
+    location: nominatim::Location,
+}
+
 fn location_updates(
     race_name: &str,
     race: watch::Receiver<fmc::Update>,
     cap: u64,
-) -> watch::Receiver<Update<nominatim::Location>> {
+) -> UpdateStream<CapLocation> {
     let race_name = race_name.to_owned();
     let (tx, rx) = tokio::sync::watch::channel(Update::Pending);
     tokio::task::spawn(async move {
         WatchStream::new(race)
             .flat_map(|update| futures::stream::iter(update.as_object().cloned()))
             .flat_map(|o| futures::stream::iter(o))
-            .map(|(_, v)| v)
-            .flat_map(|cap| futures::stream::iter(cap.as_object().cloned()))
+            .map(|(_, v)| v.to_owned())
             .filter(|update| future::ready(team_number(update) == Some(cap)))
             .scan((0.0, 0.0), |state, update| {
                 let lat = update["latitude"].as_f64().expect("latitude not an f64") as f32;
@@ -84,15 +90,19 @@ fn location_updates(
                         let location = nominatim::address_info(lat, lon)
                             .await
                             .expect("Failed to get location");
-                        Some(futures::stream::iter(Some(location)))
+                        Some(futures::stream::iter(Some((update, location))))
                     } else {
-                        Some(futures::stream::iter(Option::<nominatim::Location>::None))
+                        Some(futures::stream::iter(None))
                     }
                 }
             })
             .flatten()
-            .for_each(|location| async {
-                info!("New Location for {race_name} {cap}: {location:?}");
+            .for_each(|(cap_update, location)| async {
+                info!("New Location for {race_name} {cap}: {location:?})");
+                let location = CapLocation {
+                    cap: cap_update,
+                    location: location,
+                };
                 tx.send(Update::New(location)).expect("Send failed")
             })
             .await;
@@ -101,8 +111,9 @@ fn location_updates(
     rx
 }
 
-fn team_number(rider: &serde_json::Map<String, serde_json::Value>) -> Option<u64> {
+fn team_number(rider: &serde_json::Value) -> Option<u64> {
     rider
+        .as_object()?
         .get("teamNumber")
         .and_then(|j| j.as_str())
         .and_then(|s| u64::from_str_radix(s, 10).ok())

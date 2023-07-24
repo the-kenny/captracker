@@ -8,8 +8,9 @@ use axum::{
     routing::get,
     Extension, Router,
 };
-use captracker::Subscriptions;
+use captracker::{fmc, nominatim, Subscriptions};
 use futures::stream::StreamExt as _;
+use serde::Serialize;
 use std::{convert::Infallible, future, net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 // use tokio_stream::StreamExt as _;
@@ -86,14 +87,13 @@ async fn race_stream(
 
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
-
 async fn location_stream(
     Path((race, cap)): Path<(String, u64)>,
     Extension(subs): Extension<Arc<RwLock<Subscriptions>>>,
 ) -> sse::Sse<impl futures::stream::Stream<Item = Result<sse::Event, Infallible>>> {
     let rx = {
-        let mut lock = subs.write().await;
-        lock.cap(&race, cap)
+        let mut subs = subs.write().await;
+        subs.cap(&race, cap)
     };
 
     let stream = tokio_stream::wrappers::WatchStream::new(rx)
