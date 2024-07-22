@@ -28,13 +28,13 @@
   </div>
 </body>
 <script type="application/javascript">
-  const [_, race, cap] = window.location.pathname.split('/')
+  const [_, platform, race, cap] = window.location.pathname.split('/')
 
   console.log(`Race`, race, 'Cap', cap)
 
   document.title = `${race} Cap ${cap}`
 
-  const evtSource = new EventSource(`/sse/${race}/${cap}/location`);
+  const evtSource = new EventSource(`${window.location.pathname}/sse`);
   evtSource.addEventListener("location_update", function (event) {
     console.log("Got location_update");
     const update = JSON.parse(event.data);
@@ -56,9 +56,12 @@
     if (country || state) { text += `${state || ''} ${country || ''}\n` }
 
     document.getElementById('location').innerText = text;
-    document.getElementById('location_latlon').innerText = `${cap.riderName} (${location.lat} ${location.lon})`;
+
+    let lat = parseFloat(location.lat).toFixed(4);
+    let lon = parseFloat(location.lon).toFixed(4);
+    document.getElementById('location_latlon').innerText = `${cap.riderName} (${lat} ${lon})`;
     // document.getElementById("osm_link").setAttribute("href", `http://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lon}&zoom=16`)
-    document.getElementById("osm_link").setAttribute("href", `/${race}?${cap}`)
+    document.getElementById("osm_link").setAttribute("href", `/${platform}/${race}?${cap.teamNumber}`)
 
   });
 </script>

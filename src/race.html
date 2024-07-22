@@ -27,7 +27,7 @@
   <div id="map" class="map"></div>
 </body>
 <script type="application/javascript">
-  const race = window.location.pathname.replace('/', '')
+  const [_, platform, race] = window.location.pathname.split('/')
   const highlightedCaps = new Set(window.location.search.replace("?", "").split(",").map(n => parseInt(n, 10)).filter(n => !isNaN(n)));
 
   console.log(`Race`, race)
@@ -38,7 +38,7 @@
   const ridersSource = new ol.source.Vector({
   });
 
-  const highlightedStyle = new ol.style.Style({
+  const highlightedStyles = [new ol.style.Style({
     image: new ol.style.Circle({
       radius: 10,
       stroke: new ol.style.Stroke({
@@ -53,8 +53,28 @@
       fill: new ol.style.Fill({
         color: '#fff',
       }),
+      stroke: new ol.style.Stroke({
+        color: '#000',
+      }),
     }),
-  });
+  }),
+  new ol.style.Style({
+    text: new ol.style.Text({
+      text: "",
+      textAlign: 'start',
+      textBaseline: 'middle',
+      justify: 'center',
+      offsetX: 15,
+      fill: new ol.style.Fill({
+        color: '#fff',
+      }),
+      backgroundFill: new ol.style.Fill({
+        color: '#000'
+      }),
+      padding: [1, 1, 1, 1],
+    })
+  })
+  ];
 
   const mutedStyle = new ol.style.Style({
     image: new ol.style.Circle({
@@ -69,7 +89,7 @@
     text: new ol.style.Text({
       text: "",
       fill: new ol.style.Fill({
-        color: 'rgba(255,255,255,0.3)',
+        color: 'rgba(255,255,255,0.4)',
       }),
     }),
   });
@@ -97,16 +117,22 @@
     style: function (feature) {
       var style = normalStyle;
 
+
       if (highlightedCaps.size > 0) {
         const cap = parseInt(feature.getProperties()["teamNumber"], 10);
         if (highlightedCaps.has(cap)) {
-          style = highlightedStyle;
+          let [pointStyle, labelStyle] = highlightedStyles;
+          pointStyle.getText().setText(feature.getProperties()["teamNumber"]);
+          labelStyle.getText().setText(feature.getProperties()["riderName"]);
+          style = [pointStyle, labelStyle];
         } else {
           style = mutedStyle;
+          style.getText().setText(feature.getProperties()["teamNumber"]);
         }
+      } else {
+        style.getText().setText(feature.getProperties()["teamNumber"]);
       }
 
-      style.getText().setText(feature.getProperties()["teamNumber"]);
       return style;
     },
   });
@@ -126,7 +152,7 @@
 
   var fitted = false;
 
-  const evtSource = new EventSource(`/sse/${race}`);
+  const evtSource = new EventSource(`${window.location.pathname}/sse`);
   evtSource.addEventListener("race_update", function (event) {
     console.log("Got race_update");
     const data = JSON.parse(event.data);

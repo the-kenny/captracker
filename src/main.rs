@@ -48,10 +48,10 @@ async fn main() {
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
-        .route("/:race", race_page)
-        .route("/:race/:cap", location_page)
-        .route("/sse/:race", get(race_stream))
-        .route("/sse/:race/:cap/location", get(location_stream))
+        .route("/fmc/:race", race_page)
+        .route("/fmc/:race/sse", get(race_stream))
+        .route("/fmc/:race/:cap", location_page)
+        .route("/fmc/:race/:cap/sse", get(location_stream))
         // `POST /users` goes to `create_user`
         .layer(Extension(subscriptions));
 
